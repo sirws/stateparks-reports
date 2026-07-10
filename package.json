@@ -1,0 +1,19 @@
+{
+  "name": "stateparks-reports",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Washington State Parks report generator using ArcGIS Maps SDK for JavaScript v5",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@arcgis/core": "^5.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}
