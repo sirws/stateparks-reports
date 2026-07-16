@@ -2,6 +2,7 @@
  * Submits a report as an asynchronous geoprocessing job, tracks its progress,
  * and resolves the downloadable result.
  */
+import IdentityManager from "@arcgis/core/identity/IdentityManager.js";
 import * as geoprocessor from "@arcgis/core/rest/geoprocessor.js";
 import type { ReportSchema } from "./reports";
 
@@ -31,6 +32,27 @@ function extractUrl(value: unknown): string | null {
 }
 
 /**
+ * Appends the current ArcGIS token to a result URL so the file can be
+ * downloaded directly by the browser. The web-tools server returns a 499
+ * ("token required") error when the link is opened without one.
+ */
+async function appendToken(url: string): Promise<string> {
+  try {
+    const credential = await IdentityManager.getCredential(url, {
+      error: null,
+    });
+    if (credential?.token) {
+      const withToken = new URL(url);
+      withToken.searchParams.set("token", credential.token);
+      return withToken.toString();
+    }
+  } catch {
+    // Fall through and return the original URL if no token is available.
+  }
+  return url;
+}
+
+/**
  * Runs the report and returns its result. `onStatus` is invoked with the job
  * status each time it changes while polling.
  */
@@ -51,8 +73,11 @@ export async function runReport(
   const result = await jobInfo.fetchResultData(outputName);
   const value = (result as { value?: unknown }).value ?? result;
 
+  const rawUrl = extractUrl(value);
+  const url = rawUrl ? await appendToken(rawUrl) : null;
+
   return {
-    url: extractUrl(value),
+    url,
     raw: value,
     parameterName: outputName,
   };
