@@ -38,9 +38,7 @@ function extractUrl(value: unknown): string | null {
  */
 async function appendToken(url: string): Promise<string> {
   try {
-    const credential = await IdentityManager.getCredential(url, {
-      error: null,
-    });
+    const credential = await IdentityManager.getCredential(url);
     if (credential?.token) {
       const withToken = new URL(url);
       withToken.searchParams.set("token", credential.token);
