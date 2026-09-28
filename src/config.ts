@@ -23,6 +23,12 @@ export interface ReportConfig {
    * input parameter name.
    */
   parameterChoiceSources?: Record<string, ChoiceSource>;
+  /**
+   * Parameters that are hidden from the generated form and always submitted
+   * with a fixed value the user cannot see or override. Keyed by input
+   * parameter name.
+   */
+  fixedParameters?: Record<string, unknown>;
 }
 
 /**
@@ -65,3 +71,13 @@ export const REPORTS: ReportConfig[] = [
     url: "https://notebookswebtools5.arcgis.com/arcgis/rest/services/6e024e6e7a354e7099ce091aca8d2f1c/GPServer/Generate_Building_Report",
   },
 ];
+
+/** The FICAP Calculations web tool, shown on its own tab. */
+export const FICAP_TOOL: ReportConfig = {
+  id: "ficap-calculations",
+  label: "FICAP Calculations",
+  url: "https://notebookswebtools5.arcgis.com/arcgis/rest/services/56ac25f87f6b4547975918862febef5a/GPServer/FICAP_Calculations_WT",
+  fixedParameters: {
+    where_clause: "Modifier is null",
+  },
+};

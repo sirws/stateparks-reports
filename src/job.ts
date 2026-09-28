@@ -59,6 +59,19 @@ export async function runReport(
   params: Record<string, unknown>,
   onStatus: JobStatusCallback
 ): Promise<ReportResult> {
+  // Fixed parameters from config always win over any form-supplied value.
+  const merged = { ...params, ...(schema.config.fixedParameters ?? {}) };
+  return schema.asynchronous
+    ? runAsync(schema, merged, onStatus)
+    : runSync(schema, merged, onStatus);
+}
+
+/** Runs an asynchronous geoprocessing task via submitJob and polls to completion. */
+async function runAsync(
+  schema: ReportSchema,
+  params: Record<string, unknown>,
+  onStatus: JobStatusCallback
+): Promise<ReportResult> {
   const jobInfo = await geoprocessor.submitJob(schema.config.url, params);
 
   await jobInfo.waitForJobCompletion({
@@ -66,8 +79,16 @@ export async function runReport(
     statusCallback: (info) => onStatus(info.jobStatus),
   });
 
-  // Prefer the first declared output parameter; fall back to "output".
-  const outputName = schema.outputNames[0] ?? "output";
+  // Some tools declare no output parameter; there is nothing to fetch.
+  const outputName = schema.outputNames[0];
+  if (!outputName) {
+    return {
+      url: null,
+      raw: { jobId: jobInfo.jobId, jobStatus: jobInfo.jobStatus },
+      parameterName: "",
+    };
+  }
+
   const result = await jobInfo.fetchResultData(outputName);
   const value = (result as { value?: unknown }).value ?? result;
 
@@ -78,5 +99,31 @@ export async function runReport(
     url,
     raw: value,
     parameterName: outputName,
+  };
+}
+
+/** Runs a synchronous geoprocessing task via execute and returns its result. */
+async function runSync(
+  schema: ReportSchema,
+  params: Record<string, unknown>,
+  onStatus: JobStatusCallback
+): Promise<ReportResult> {
+  onStatus("job-executing");
+
+  const response = await geoprocessor.execute(schema.config.url, params);
+  const results = response.results ?? [];
+
+  const outputName = schema.outputNames[0] ?? results[0]?.parameterName ?? "output";
+  const match =
+    results.find((r) => r.parameterName === outputName) ?? results[0];
+  const value = match?.value;
+
+  const rawUrl = extractUrl(value);
+  const url = rawUrl ? await appendToken(rawUrl) : null;
+
+  return {
+    url,
+    raw: value,
+    parameterName: match?.parameterName ?? outputName,
   };
 }

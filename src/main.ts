@@ -4,7 +4,7 @@
  */
 import "./styles/brand.css";
 import { getCurrentUser, initAuth, signIn, signOut } from "./auth";
-import { APP_ID, REPORTS } from "./config";
+import { APP_ID, FICAP_TOOL, REPORTS } from "./config";
 import { applyValues, readFormValues, renderForm } from "./form";
 import { runReport } from "./job";
 import { loadReportSchema, type ReportSchema } from "./reports";
@@ -110,7 +110,35 @@ function renderApp(userName: string): void {
 
   app.innerHTML = shell(
     `
-    <section class="card">
+    <div class="tabs" role="tablist" aria-label="Tools">
+      <button
+        id="tab-report"
+        class="tab active"
+        role="tab"
+        type="button"
+        aria-selected="true"
+        aria-controls="panel-report"
+      >
+        Generate a report
+      </button>
+      <button
+        id="tab-ficap"
+        class="tab"
+        role="tab"
+        type="button"
+        aria-selected="false"
+        aria-controls="panel-ficap"
+      >
+        FICAP Calculations
+      </button>
+    </div>
+
+    <section
+      id="panel-report"
+      class="card"
+      role="tabpanel"
+      aria-labelledby="tab-report"
+    >
       <h1>Generate a report</h1>
 
       <div class="field">
@@ -133,6 +161,28 @@ function renderApp(userName: string): void {
 
       <div id="status" class="status" role="status" aria-live="polite" hidden></div>
     </section>
+
+    <section
+      id="panel-ficap"
+      class="card"
+      role="tabpanel"
+      aria-labelledby="tab-ficap"
+      hidden
+    >
+      <h1>FICAP Calculations</h1>
+
+      <p id="ficap-description" class="report-description" hidden></p>
+
+      <form id="ficap-form" novalidate></form>
+
+      <div class="actions">
+        <button id="ficap-run-button" class="primary-button" type="button" disabled>
+          Run FICAP calculations
+        </button>
+      </div>
+
+      <div id="ficap-status" class="status" role="status" aria-live="polite" hidden></div>
+    </section>
   `,
     userName
   );
@@ -141,7 +191,34 @@ function renderApp(userName: string): void {
     .querySelector<HTMLButtonElement>("#sign-out")!
     .addEventListener("click", signOut);
 
+  wireTabs();
   wireReportWorkflow();
+  wireFicapWorkflow();
+}
+
+/** Toggles visibility of the tab panels when a tab is activated. */
+function wireTabs(): void {
+  const tabs = [
+    {
+      tab: document.querySelector<HTMLButtonElement>("#tab-report")!,
+      panel: document.querySelector<HTMLElement>("#panel-report")!,
+    },
+    {
+      tab: document.querySelector<HTMLButtonElement>("#tab-ficap")!,
+      panel: document.querySelector<HTMLElement>("#panel-ficap")!,
+    },
+  ];
+
+  for (const { tab } of tabs) {
+    tab.addEventListener("click", () => {
+      for (const entry of tabs) {
+        const selected = entry.tab === tab;
+        entry.tab.classList.toggle("active", selected);
+        entry.tab.setAttribute("aria-selected", String(selected));
+        entry.panel.hidden = !selected;
+      }
+    });
+  }
 }
 
 function wireReportWorkflow(): void {
@@ -235,6 +312,80 @@ function wireReportWorkflow(): void {
     select.value = reportId;
     void loadSelectedReport(values);
   }
+}
+
+/**
+ * Wires the FICAP Calculations tab. The web tool's schema is loaded on demand
+ * (the first time the tab is shown), its form is rendered, and clicking Run
+ * executes the geoprocessing tool.
+ */
+function wireFicapWorkflow(): void {
+  const tab = document.querySelector<HTMLButtonElement>("#tab-ficap")!;
+  const description = document.querySelector<HTMLParagraphElement>(
+    "#ficap-description"
+  )!;
+  const form = document.querySelector<HTMLFormElement>("#ficap-form")!;
+  const runButton =
+    document.querySelector<HTMLButtonElement>("#ficap-run-button")!;
+  const status = document.querySelector<HTMLDivElement>("#ficap-status")!;
+
+  let currentSchema: ReportSchema | null = null;
+  let loading = false;
+
+  async function loadFicap(): Promise<void> {
+    if (currentSchema || loading) {
+      return;
+    }
+    loading = true;
+    showStatus(status, "Loading FICAP parameters…");
+    try {
+      const schema = await loadReportSchema(FICAP_TOOL);
+      currentSchema = schema;
+      description.textContent = schema.description;
+      description.hidden = !schema.description;
+      renderForm(schema, form);
+      runButton.disabled = false;
+      clearStatus(status);
+    } catch (err) {
+      showError(status, `Could not load FICAP parameters: ${errorText(err)}`);
+    } finally {
+      loading = false;
+    }
+  }
+
+  // Load the schema the first time the FICAP tab is activated.
+  tab.addEventListener("click", () => {
+    void loadFicap();
+  });
+
+  runButton.addEventListener("click", async () => {
+    if (!currentSchema) {
+      return;
+    }
+    if (!form.reportValidity()) {
+      return;
+    }
+
+    const params = readFormValues(form);
+    runButton.disabled = true;
+    showStatus(status, "Submitting FICAP calculations…");
+
+    try {
+      const result = await runReport(currentSchema, params, (jobStatus) => {
+        showStatus(status, statusLabel(jobStatus));
+      });
+
+      if (result.url) {
+        showResultLink(status, result.url, "Download results");
+      } else {
+        showRawResult(status, result.raw);
+      }
+    } catch (err) {
+      showError(status, `FICAP calculations failed: ${errorText(err)}`);
+    } finally {
+      runButton.disabled = false;
+    }
+  });
 }
 
 function errorText(err: unknown): string {

@@ -66,9 +66,11 @@ export async function loadReportSchema(
 
   const data = response.data as RawGpService;
   const parameters = data.parameters ?? [];
+  const fixed = config.fixedParameters ?? {};
 
   const inputs: GpParameter[] = parameters
     .filter((p) => p.direction === "esriGPParameterDirectionInput")
+    .filter((p) => !(p.name in fixed))
     .map((p) => ({
       name: p.name,
       displayName: p.displayName || p.name,
