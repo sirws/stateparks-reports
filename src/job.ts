@@ -111,7 +111,9 @@ async function runSync(
   onStatus("job-executing");
 
   const response = await geoprocessor.execute(schema.config.url, params);
-  const results = response.results ?? [];
+  const results =
+    (response as { results?: Array<{ parameterName: string; value: unknown }> })
+      .results ?? [];
 
   const outputName = schema.outputNames[0] ?? results[0]?.parameterName ?? "output";
   const match =
